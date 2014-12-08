@@ -6,8 +6,8 @@
 #include <linux/mm.h>
 #include <linux/cdev.h>
 #include <asm/io.h>
-#include <asm/system.h>
-#include <uaccess.h>
+#include <linux/kernel.h>
+#include <linux/moduleparam.h>
 
 #include "mem_dev.h"
 
@@ -122,6 +122,49 @@ static loff_t mem_llseek(strcut file *filp, loff_t offset, int whence)
 	return newpos;
 }
 
+static int mem_ioctl(struct inode *inode, struct file *filp,
+		unsigned int cmd, unsigned long arg)
+{
+	int err = 0;
+	int ret = 0;
+	int ioarg = 0;
+
+	/*检测命令的有效性*/
+	if(_IOC_TYPE(cmd) != MEMDEV_IOC_MAGIC)
+		return -EINVAL;
+	if(_IOC_NR(cmd) != MEMDEV_IOC_MAXNR)
+		return -EINVAL;
+
+	/*根据命令类型，检测参数空间是否可以访问*/
+	if(_IOC_DIR(cmd) & _IOC_READ)
+		err = !access_ok(VERIFY_WRITE, (void *)arg, _IOC_SIZE(cmd));
+	else if(_IOC_DIR(cmd) & _IOC_WRITE)
+		err = !access_ok(VERIFY_READ, (void *)arg, _IOC_SIZE(cmd));
+
+	if(err)
+		return -EFAULT;
+
+	/*根据命令， 执行相应到操作*/
+	switch(cmd)
+	{
+		case MEMDEV_IOCPRINT:
+			printk("<---cmd MEMDEV_IOCPRINT done!--->");
+			break;
+		case MEMDEV_IOCGETDATA:
+			ioarg = 1101;
+			ret = __put_user(ioarg, (int *)arg);
+			break;
+		case MEMDEV_IOCSETDATA:
+			ret = __get_user(ioarg, (int *)arg);
+			printk("<---MEMDEV_IOCSETDATA ioarg = %d--->\n", ioarg);
+			break;
+		default:
+			return -EINVAL;
+	}
+	return ret;
+
+}
+
 static const struct file_operations mem_fops =
 {
 	.owner = THIS_MODULE,
@@ -130,6 +173,7 @@ static const struct file_operations mem_fops =
 	.write = mem_write,
 	.open = mem_open,
 	.release = mem_release,
+	.ioctl = mem_ioctl,
 };
 
 static int __init memdev_init(void)
