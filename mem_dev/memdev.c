@@ -8,13 +8,15 @@
 #include <asm/io.h>
 #include <linux/kernel.h>
 #include <linux/moduleparam.h>
+#include <linux/uaccess.h>
+#include <linux/slab.h>
 
-#include "mem_dev.h"
+#include "memdev.h"
 
-static mem_major = MEMDEV_MAJOR;
-static mem_minor = 0;
+static int mem_major = MEMDEV_MAJOR;
+static int mem_minor = 0;
 
-module_param(mem_major, int, S_IRUGO);
+module_param(mem_major, int, S_IRUGO);	//模块参数
 
 struct mem_dev *mem_devp;	/*设备结构体指针*/
 
@@ -96,7 +98,7 @@ static ssize_t mem_write(struct file *filp, char __user *buf, size_t size, loff_
 
 }
 
-static loff_t mem_llseek(strcut file *filp, loff_t offset, int whence)
+static loff_t mem_llseek(struct file *filp, loff_t offset, int whence)
 {
 	loff_t newpos;
 
@@ -122,8 +124,7 @@ static loff_t mem_llseek(strcut file *filp, loff_t offset, int whence)
 	return newpos;
 }
 
-static int mem_ioctl(struct inode *inode, struct file *filp,
-		unsigned int cmd, unsigned long arg)
+static int mem_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int err = 0;
 	int ret = 0;
@@ -173,7 +174,7 @@ static const struct file_operations mem_fops =
 	.write = mem_write,
 	.open = mem_open,
 	.release = mem_release,
-	.ioctl = mem_ioctl,
+	.unlocked_ioctl = mem_ioctl,
 };
 
 static int __init memdev_init(void)
@@ -206,10 +207,10 @@ static int __init memdev_init(void)
 	/**************注册字符设备*************/
 
 	/*初始化cdev结构*/	
-	cdev_init(&mem_dev->cdev, &mem_fops);
+	cdev_init(&mem_devp->cdev, &mem_fops);
 
 	/*注册字符设备*/
-	cdev_add(&mem_dev->cdev, devno, 1);
+	cdev_add(&mem_devp->cdev, devno, 1);
 
 	/*为设备描述结构分配内存*/
 	mem_devp = kmalloc(MEMDEV_NR_DEVS * sizeof(struct mem_dev), GFP_KERNEL);
@@ -249,4 +250,4 @@ static void __exit memdev_exit(void)
 
 MODULE_LICENSE("GPL");
 module_init(memdev_init);
-module_init(memdev_exit);
+module_exit(memdev_exit);
